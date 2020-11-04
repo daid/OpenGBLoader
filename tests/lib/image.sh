@@ -14,16 +14,24 @@ createImageRaw()
 
     rm -rf "${FILENAME}"
     truncate -s "${SIZE}" "${FILENAME}"
-    mformat ${MTOOLS_PARAMS} ${FORMAT_PARAMS}
+    fillImage
 }
 
 createImageMBR()
 {
-    MTOOLS_PARAMS="-i ${FILENAME}"
+    MTOOLS_PARAMS="-i ${FILENAME}@@1M"
     SIZE=$1
     FORMAT_PARAMS=$2
 
     rm -rf "${FILENAME}"
     truncate -s "${SIZE}" "${FILENAME}"
+    echo "2048,,c;" | sfdisk "${FILENAME}" > /dev/null
+    fillImage
+}
+
+fillImage()
+{
     mformat ${MTOOLS_PARAMS} ${FORMAT_PARAMS}
+    echo "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gb
+    echo "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gbc
 }

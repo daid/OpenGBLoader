@@ -42,7 +42,7 @@ $(ROMDIR)/tests/%.gb $(ROMDIR)/tests/%.sym $(ROMDIR)/tests/%.map: $(patsubst %.a
 	$(Q)$(RGBLINK) -p 0xff $(LDFLAGS) -m $(ROMDIR)/tests/$*.map -n $(ROMDIR)/tests/$*.sym -o $(ROMDIR)/tests/$*.gb $^
 	$(Q)$(RGBFIX) -p 0xff -v $(ROMDIR)/tests/$*.gb
 
-$(BUILDDIR)/tests/%.image: tests/%.sh
+$(BUILDDIR)/tests/%.image: tests/%.sh tests/lib/image.sh
 	@echo "Creating image $@"
 	$(Q)sh tests/$*.sh $@
 

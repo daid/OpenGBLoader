@@ -9,11 +9,12 @@ test::
     call readSDSector
     jp   z, testFailed
 
-    ; Check if there is data in the sector
-    ld   hl, SDSectorData
-REPT $200
-    ld   a, [hl+]
-    and  a
-    ret  nz
-ENDR
-    jp   testFailed
+    ; Check the boot sector signature.
+    ld   a, [SDSectorData + 510]
+    cp   $55
+    jp   nz, testFailed
+    ld   a, [SDSectorData + 511]
+    cp   $aa
+    jp   nz, testFailed
+
+    ret
