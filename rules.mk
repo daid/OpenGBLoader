@@ -8,10 +8,10 @@ RGBASM   ?= $(RGBDS)rgbasm
 RGBLINK  ?= $(RGBDS)rgblink
 RGBFIX   ?= $(RGBDS)rgbfix
 
-INCDIRS  = src
-WARNINGS = all extra
-ASFLAGS  = $(addprefix -i,$(INCDIRS)) $(addprefix -W,$(WARNINGS))
-LDFLAGS  =
+INCDIRS  := src
+WARNINGS := all extra
+ASFLAGS  := $(addprefix -i,$(INCDIRS)) $(addprefix -W,$(WARNINGS))
+LDFLAGS  :=
 
 rwildcard  = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
 MAINSRC    := $(call rwildcard,src,*.asm)

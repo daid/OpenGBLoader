@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -eu
+. tests/lib/image.sh
 
-rm -rf ${1}
-truncate -s 128M ${1}
-mformat -i ${1} -F
+createImageRaw 128M -F
