@@ -3,6 +3,7 @@ wFATStartSector: ds 4       ; LBA, LSB first
 wRootDirectoryStart: ds 4   ; LBA, LSB first
 wClustersStart: ds 4        ; LBA, LSB first
 wClusterSize: ds 1
+wRootDirFixed: ds 1
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -164,9 +165,22 @@ ENDR
     inc  de
     dec  c
     jr   nz, .copyRootDirStart
+    jp   .rootDirDone
 
-    .fixedRootDirectory
+.fixedRootDirectory:
+    ld   a, $01
+    ld   [wRootDirFixed], a
+    ; Find out where the clusters start by skipping over the root directory list
+    ; de contains the root directory size in sectors
+    xor  a
+    ld   c, a
+    ld   b, a
+    ld   hl, wRootDirectoryStart
+    call add32Bit
+    ld   hl, wClustersStart
+    call store32Bit
 
+.rootDirDone:
     ; Done
     xor  a
     ret
