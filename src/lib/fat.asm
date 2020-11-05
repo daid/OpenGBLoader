@@ -1,7 +1,7 @@
 SECTION "libfatRAM", WRAM0
 wFATStartSector: ds 4       ; LBA, LSB first
 wRootDirectoryStart: ds 4   ; LBA, LSB first
-wDataStartSector: ds 4      ; LBA, LSB first
+wClustersStart: ds 4        ; LBA, LSB first
 wClusterSize: ds 1
 wMemEnd:
 
@@ -50,7 +50,7 @@ fatInit::
     dec  c
     jr   nz, .copyStartSectorLBA
     ld   hl, wFATStartSector
-    call read32Bit
+    call load32Bit
     call readSDSector
 
 .checkForBootSector:
@@ -62,8 +62,18 @@ fatInit::
     cp   $aa
     ret  nz
 
+    ; Check the bytes per sector value
+    ld   a, [SDSectorData + $0b]
+    and  a
+    ret  nz
+    ld   a, [SDSectorData + $0c]
+    cp   $02
+    ret  nz
+
     ; Read the number of sectors per cluster
     ld   a, [SDSectorData + $0d]
+    and  a
+    jp   z, errorRet
     ld   [wClusterSize], a
 
     ; Load the number of reserved sectors, and skip past them for the start of the FAT.
@@ -126,10 +136,43 @@ fatInit::
     ld   hl, wRootDirectoryStart
     call store32Bit
 
+    ; Get the size of the root directory. This is 32byte entries. So we need to divide by 32.
+    ld   a, [SDSectorData + $11]
+    ld   e, a
+    ld   a, [SDSectorData + $12]
+    ld   d, a
+    ; /32, inefficient, but easy to code. Sorry
+REPT 5
+    srl  d
+    rr   e
+ENDR
+    ld   a, d
+    or   e
+    jr   nz, .fixedRootDirectory
+
+    ; FAT32, root directory is located in data section.
+    ld   hl, wRootDirectoryStart
+    call load32Bit
+    ld   hl, wClustersStart
+    call store32Bit
+    ld   hl, SDSectorData + $2C
+    ld   de, wRootDirectoryStart
+    ld   c, 4
+.copyRootDirStart:
+    ld   a, [hl+]
+    ld   [de], a
+    inc  de
+    dec  c
+    jr   nz, .copyRootDirStart
+
+    .fixedRootDirectory
+
+    ; Done
     xor  a
     ret
 
-; Add the 32bit value stored at HL to BCDE
+
+; Add the 32bit value stored at [HL] to BCDE
 add32Bit:
     ld   a, [hl+]
     add  e
@@ -145,7 +188,8 @@ add32Bit:
     ld   b, a
     ret
 
-read32Bit:
+; Read a 32bit value from [hl] to BCDE
+load32Bit:
     ld   e, [hl]
     inc  hl
     ld   d, [hl]
@@ -155,6 +199,7 @@ read32Bit:
     ld   b, [hl]
     ret
 
+; Store the 32bit value in BCDE into [hl]
 store32Bit:
     ld   [hl], e
     inc  hl
