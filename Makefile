@@ -4,6 +4,8 @@ all:
 
 include rules.mk
 
+BADBOY ?= BadBoy
+
 TEST_TARGETS := $(foreach ROM,$(TESTROMS),$(foreach IMAGE,$(TESTIMAGES),$(ROM)-$(IMAGE)))
 $(TEST_TARGETS): ROM = $(word 1,$(subst -, ,$@))
 $(TEST_TARGETS): IMAGE = $(word 2,$(subst -, ,$@))
