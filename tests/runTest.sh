@@ -6,10 +6,11 @@ ROM="${1}"
 IMAGE="${2}"
 SRC="${3}"
 
-RES=$("${BADBOY}" -c 1000000 "${1}" -e "${2}" 2>/dev/null)
+RES=$("${BADBOY}" -c 10000000 "${1}" -e "${2}" 2>/dev/null)
 EXP=$(cat ${SRC}.expect 2>/dev/null || echo "DONE")
 if [ "${RES}" != "${EXP}" ]; then
     echo "Test failed: ${SRC} ${IMAGE}"
+    echo "${BADBOY}" -c 10000000 "${1}" -e "${2}"
     echo "Result: ${RES}"
     echo "Expected: ${EXP}"
     exit 1

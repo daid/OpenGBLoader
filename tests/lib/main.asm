@@ -33,7 +33,9 @@ serialPrint::
     call serialCharOut
     jr   .loop
 
-printHex::
+serialPrintHex::
+    push af
+    push bc
     ld   c, a
     swap a
     and  $0F
@@ -51,6 +53,8 @@ printHex::
     add  "A" - "0" - 10
 .lowerDigit:
     call serialCharOut
+    pop  bc
+    pop  af
     ret
 
 serialCharOut:
