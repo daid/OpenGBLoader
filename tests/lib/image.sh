@@ -5,6 +5,7 @@
 set -eu
 
 FILENAME=$1
+SFDISK=$(which sfdisk || echo "/sbin/sfdisk")
 
 createImageRaw()
 {
@@ -25,7 +26,7 @@ createImageMBR()
 
     rm -rf "${FILENAME}"
     truncate -s "${SIZE}" "${FILENAME}"
-    echo "2048,,c;" | /sbin/sfdisk "${FILENAME}" > /dev/null
+    echo "2048,,c;" | "${SFDISK}" "${FILENAME}" > /dev/null
     fillImage
 }
 

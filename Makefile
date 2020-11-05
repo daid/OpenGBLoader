@@ -6,13 +6,13 @@ include rules.mk
 
 BADBOY ?= BadBoy
 
-TEST_TARGETS := $(foreach ROM,$(TESTROMS),$(foreach IMAGE,$(TESTIMAGES),$(ROM)-$(IMAGE)))
-$(TEST_TARGETS): ROM = $(word 1,$(subst -, ,$@))
-$(TEST_TARGETS): IMAGE = $(word 2,$(subst -, ,$@))
+TEST_TARGETS := $(foreach SRC,$(TESTSRC),$(foreach IMAGE,$(TESTIMAGES),$(SRC)-XXX-$(IMAGE)))
+$(TEST_TARGETS): SRC = $(word 1,$(subst -XXX-, ,$@))
+$(TEST_TARGETS): ROM = $(patsubst %.asm,$(ROMDIR)/%.gb,$(SRC))
+$(TEST_TARGETS): IMAGE = $(word 2,$(subst -XXX-, ,$@))
 $(TEST_TARGETS):
-	@echo "Test: $(ROM) $(IMAGE)"
-	@#TODO: Check result of test.
-	@$(BADBOY) -c 10000000 $(ROM) -e $(IMAGE) 2>/dev/null
+	@echo "Test: $(SRC) $(IMAGE)"
+	$(Q)BADBOY=$(BADBOY) tests/runTest.sh $(ROM) $(IMAGE) $(SRC)
 .PHONY: $(TEST_TARGETS)
 
 tests: $(TESTROMS) $(TESTIMAGES) $(TEST_TARGETS)
