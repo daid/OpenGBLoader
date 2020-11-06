@@ -2,8 +2,8 @@ SECTION "libfatRAM", WRAM0
 wFATStartSector: ds 4       ; LBA, LSB first
 wRootDirectoryStart: ds 4   ; LBA, LSB first
 wClustersStart: ds 4        ; LBA, LSB first
-wClusterSize: ds 1
-wRootDirFixed: ds 1
+wClusterSize: ds 1          ; In number of required left shifts
+wFAT16: ds 1
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -25,7 +25,7 @@ fatInit::
     ld   d, a
     ld   e, a
     call readSDSector
-    ret  z
+    jp   z, errorRet
 
     ; Both the MBR and the FAT boot sector contain this signature.
     ld   a, [SDSectorData + 510]
@@ -53,6 +53,7 @@ fatInit::
     ld   hl, wFATStartSector
     call load32Bit
     call readSDSector
+    jp   z, errorRet
 
 .checkForBootSector:
     ; Both the MBR and the FAT boot sector contain this signature.
@@ -73,8 +74,17 @@ fatInit::
 
     ; Read the number of sectors per cluster
     ld   a, [SDSectorData + $0d]
-    and  a
-    jp   z, errorRet
+    ld   c, $00
+    ld   b, $01
+.setClusterSizeLoop:
+    cp   b
+    jr   z, .setClusterSize
+    inc  c
+    sla  b
+    jr   nz, .setClusterSizeLoop
+    jp   errorRet
+.setClusterSize:
+    ld   a, c
     ld   [wClusterSize], a
 
     ; Load the number of reserved sectors, and skip past them for the start of the FAT.
@@ -90,7 +100,7 @@ fatInit::
     ld   hl, wFATStartSector
     call store32Bit
 
-    ; Load the amount of FAT sectors into wRoorDirectoryStart so we have a place to store it.
+    ; Load the amount of FAT sectors into wRootDirectoryStart so we have a place to store it.
     ld   hl, wRootDirectoryStart
     ld   a, [SDSectorData + $16]
     ld   c, a
@@ -137,21 +147,20 @@ fatInit::
     ld   hl, wRootDirectoryStart
     call store32Bit
 
-    ; Get the size of the root directory. This is 32byte entries. So we need to divide by 32.
+    ; Get the size of the root directory. This is 16byte entries. So we need to divide by 32 to get the amount of sectors
     ld   a, [SDSectorData + $11]
     ld   e, a
     ld   a, [SDSectorData + $12]
     ld   d, a
-    ; /32, inefficient, but easy to code. Sorry
+    or   e
+    jr   nz, .fixedRootDirectory
+    ; /32, inefficient, but easy to code. Sorry. Could be done with a swap and some more clever bit twiddling
 REPT 5
     srl  d
     rr   e
 ENDR
-    ld   a, d
-    or   e
-    jr   nz, .fixedRootDirectory
 
-    ; FAT32, root directory is located in data section.
+    ; FAT32, root directory is located in cluster data.
     ld   hl, wRootDirectoryStart
     call load32Bit
     ld   hl, wClustersStart
@@ -168,8 +177,10 @@ ENDR
     jp   .rootDirDone
 
 .fixedRootDirectory:
+    ; If we have a fixed root directory location, we are FAT16 (or FAT12)
+    ; Not the recommended/best way, but works for now.
     ld   a, $01
-    ld   [wRootDirFixed], a
+    ld   [wFAT16], a
     ; Find out where the clusters start by skipping over the root directory list
     ; de contains the root directory size in sectors
     xor  a
@@ -181,6 +192,9 @@ ENDR
     call store32Bit
 
 .rootDirDone:
+    ; TODO: Set current directory to root
+    
+
     ; Done
     xor  a
     ret
