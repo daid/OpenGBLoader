@@ -4,6 +4,9 @@ wRootDirectoryStart: ds 4   ; LBA, LSB first
 wClustersStart: ds 4        ; LBA, LSB first
 wClusterSize: ds 1          ; In number of required left shifts
 wFAT16: ds 1
+wNextDirectoryEntryCluster: ds 4  ; Note, on FAT16 this can be a sector number
+wNextDirectoryEntryIndex:   ds 1
+wCurrentDirectoryIsFixed:   ds 1  ; Current open directory is the FAT16 fixed directory list.
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -115,6 +118,7 @@ fatInit::
     ld   a, b
     or   c
     jr   nz, .no32BitFatSectorCount ; If the 16bit sector FAT sector size is zero then we have FAT32.
+    ; Load the cluster number where the root directory starts
     ld   hl, wRootDirectoryStart
     ld   a, [SDSectorData + $24]
     ld   [hl+], a
@@ -139,7 +143,9 @@ fatInit::
     ; Multiply number of FAT tables by amount of FAT sectors
 .multiplyFATSize
     ld   hl, wRootDirectoryStart
+    push af
     call add32Bit
+    pop  af
     dec  a
     jr   nz, .multiplyFATSize
     ld   hl, wFATStartSector
@@ -192,13 +198,60 @@ ENDR
     call store32Bit
 
 .rootDirDone:
-    ; TODO: Set current directory to root
-    
+    call fatOpenRootDir
+    call fatGetNextFile
 
     ; Done
     xor  a
     ret
 
+; Change the current directory to the root directory, so we can start reading files there.
+fatOpenRootDir::
+    ld   hl, wRootDirectoryStart
+    call load32Bit
+    ld   hl, wNextDirectoryEntryCluster
+    call store32Bit
+    xor  a
+    ld   [wNextDirectoryEntryIndex], a
+    ld   a, [wFAT16]
+    ld   [wCurrentDirectoryIsFixed], a
+    ret
+
+fatGetNextFile::
+    ; Get the SD card sector
+    ld   hl, wNextDirectoryEntryCluster
+    call load32Bit
+    ld   a, [wCurrentDirectoryIsFixed]
+    and  a
+    jr   nz, .readSector
+    ; We got a cluster number, need to translate that to a sector number
+    call clusterToSectorNumber
+    ; TODO: Offset the sector into the cluster
+.readSector:
+    call readSDSector
+    ; TODO: Read the directory entry
+    ; TODO: Move the entry number forward, potentially moving beyond the sector/cluster needing to move that forward.
+    ret
+
+; Translate a cluster number to a sector number.
+; BCDE contains the current sector number.
+clusterToSectorNumber:
+    ; Cluster numbers start at 2, so subtract the 2.
+    ld   a, $02
+    call subA32Bit
+    ld   a, [wClusterSize]
+    and  a
+    jr   z, .noShift
+.shiftRepeat:
+    sla  e
+    rl   d
+    rl   c
+    rl   b
+    dec  a
+    jr   nz, .shiftRepeat
+.noShift:
+    ld   hl, wClustersStart
+    jp   add32Bit
 
 ; Add the 32bit value stored at [HL] to BCDE
 add32Bit:
@@ -214,6 +267,32 @@ add32Bit:
     ld   a, [hl+]
     adc  b
     ld   b, a
+    ret
+
+; Add A to the 32bit number in BCDE
+addA32Bit:
+    add  e
+    ld   e, a
+    ret  nc
+    inc  d
+    ret  nz
+    inc  c
+    ret  nz
+    inc  b
+    ret
+
+; Substract A from the 32bit number in BCDE
+subA32Bit:
+    ld   h, a
+    ld   a, e
+    sub  h
+    ld   e, a
+    ret  nc
+    dec  d
+    ret  nz
+    dec  c
+    ret  nz
+    dec  b
     ret
 
 ; Read a 32bit value from [hl] to BCDE
@@ -241,4 +320,15 @@ store32Bit:
 errorRet:
     xor  a
     inc  a
+    ret
+
+serialPrint32Bit:
+    ld   a, b
+    call serialPrintHex
+    ld   a, c
+    call serialPrintHex
+    ld   a, d
+    call serialPrintHex
+    ld   a, e
+    call serialPrintHex
     ret
