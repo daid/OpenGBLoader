@@ -2,10 +2,12 @@ SECTION "libfatRAM", WRAM0
 wFATStartSector: ds 4       ; LBA, LSB first
 wRootDirectoryStart: ds 4   ; LBA, LSB first
 wClustersStart: ds 4        ; LBA, LSB first
-wClusterSize: ds 1          ; In number of required left shifts
+wClusterSize: ds 1          ; In sectors
+wClusterSizeShift: ds 1          ; In number of required left shifts
 wFAT16: ds 1
 wNextDirectoryEntryCluster: ds 4  ; Note, on FAT16 this can be a sector number
 wNextDirectoryEntryIndex:   ds 1
+wNextDirectoryEntrySectorInCluster: ds 1
 wCurrentDirectoryIsFixed:   ds 1  ; Current open directory is the FAT16 fixed directory list.
 wMemEnd:
 
@@ -77,6 +79,7 @@ fatInit::
 
     ; Read the number of sectors per cluster
     ld   a, [SDSectorData + $0d]
+    ld   [wClusterSize], a
     ld   c, $00
     ld   b, $01
 .setClusterSizeLoop:
@@ -88,7 +91,7 @@ fatInit::
     jp   errorRet
 .setClusterSize:
     ld   a, c
-    ld   [wClusterSize], a
+    ld   [wClusterSizeShift], a
 
     ; Load the number of reserved sectors, and skip past them for the start of the FAT.
     ld   a, [SDSectorData + $0e]
@@ -213,6 +216,7 @@ fatOpenRootDir::
     call store32Bit
     xor  a
     ld   [wNextDirectoryEntryIndex], a
+    ld   [wNextDirectoryEntrySectorInCluster], a
     ld   a, [wFAT16]
     ld   [wCurrentDirectoryIsFixed], a
     ret
@@ -226,11 +230,39 @@ fatGetNextFile::
     jr   nz, .readSector
     ; We got a cluster number, need to translate that to a sector number
     call clusterToSectorNumber
-    ; TODO: Offset the sector into the cluster
+    ld   a, [wNextDirectoryEntrySectorInCluster]
+    call addA32Bit
 .readSector:
     call readSDSector
     ; TODO: Read the directory entry
-    ; TODO: Move the entry number forward, potentially moving beyond the sector/cluster needing to move that forward.
+
+    ld   a, [wNextDirectoryEntryIndex]
+    inc  a
+    and  $1F
+    ld   [wNextDirectoryEntryIndex], a
+    ret  nz
+
+    ; Move sector/cluster number forward
+    ld   a, [wFAT16]
+    and  a
+    jr   z, .advanceInCluster
+    ld   hl, wNextDirectoryEntryCluster
+    call load32Bit
+    ld   a, $01
+    call addA32Bit
+    ld   hl, wNextDirectoryEntryCluster
+    call store32Bit
+    ret
+.advanceInCluster:
+    ld   a, [wNextDirectoryEntrySectorInCluster]
+    inc  a
+    ld   [wNextDirectoryEntrySectorInCluster], a
+    ld   hl, wClusterSize
+    cp   [hl]
+    ret  nz
+    xor  a
+    ld   [wNextDirectoryEntrySectorInCluster], a
+    ; TODO: Get next cluster
     ret
 
 ; Translate a cluster number to a sector number.
@@ -239,7 +271,7 @@ clusterToSectorNumber:
     ; Cluster numbers start at 2, so subtract the 2.
     ld   a, $02
     call subA32Bit
-    ld   a, [wClusterSize]
+    ld   a, [wClusterSizeShift]
     and  a
     jr   z, .noShift
 .shiftRepeat:

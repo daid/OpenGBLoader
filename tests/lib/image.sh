@@ -33,6 +33,9 @@ createImageMBR()
 fillImage()
 {
     mformat ${MTOOLS_PARAMS} ${FORMAT_PARAMS}
-    echo "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gb
-    echo "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gbc
+    echo -n "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gb
+    echo -n "" | mcopy ${MTOOLS_PARAMS} - ::/empty.gbc
+    for i in $(seq 0 10); do
+        echo -n "" | mcopy ${MTOOLS_PARAMS} - ::/very_long_filename${i}.gbc
+    done
 }
