@@ -57,6 +57,19 @@ serialPrintHex::
     pop  af
     ret
 
+serialPrint32Bit:
+    ld   a, b
+    call serialPrintHex
+    ld   a, c
+    call serialPrintHex
+    ld   a, d
+    call serialPrintHex
+    ld   a, e
+    call serialPrintHex
+    ld   a, "\n"
+    call serialCharOut
+    ret
+
 serialCharOut::
     ld   [rSB], a
     ld   a, $81

@@ -1,8 +1,10 @@
 all:
-	
+
 .PHONY: all
 
 include rules.mk
+
+all: $(ROMDIR)/ezgb.dat
 
 BADBOY ?= BadBoy
 
