@@ -7,8 +7,9 @@ RGBDS    ?=
 RGBASM   ?= $(RGBDS)rgbasm
 RGBLINK  ?= $(RGBDS)rgblink
 RGBFIX   ?= $(RGBDS)rgbfix
+RGBGFX   ?= $(RGBDS)rgbgfx
 
-INCDIRS  := src src/include
+INCDIRS  := src src/include $(BUILDDIR)/res
 WARNINGS := all extra
 ASFLAGS  := $(addprefix -i,$(INCDIRS)) $(addprefix -W,$(WARNINGS))
 LDFLAGS  :=
@@ -21,6 +22,8 @@ IMAGESRC   := $(wildcard tests/image.*.sh)
 
 TESTROMS   := $(patsubst %.asm,$(ROMDIR)/%.gb,$(TESTSRC))
 TESTIMAGES := $(patsubst %.sh,$(BUILDDIR)/%.image,$(IMAGESRC))
+
+VPATH      := $(BUILDDIR)/res
 
 clean:
 	-rm -rf $(BUILDDIR) $(ROMDIR)
@@ -41,6 +44,11 @@ $(ROMDIR)/tests/%.gb $(ROMDIR)/tests/%.sym $(ROMDIR)/tests/%.map: $(patsubst %.a
 	@echo "Linking $(ROMDIR)/tests/$*.gb"
 	$(Q)$(RGBLINK) -p 0xff $(LDFLAGS) -m $(ROMDIR)/tests/$*.map -n $(ROMDIR)/tests/$*.sym -o $(ROMDIR)/tests/$*.gb $^
 	$(Q)$(RGBFIX) -p 0xff -v $(ROMDIR)/tests/$*.gb
+
+$(BUILDDIR)/res/%.2bpp: res/%.png
+	@$(MKDIR) -p $(dir $(BUILDDIR)/res/$*)
+	@echo "Converting $<"
+	$(Q)$(RGBGFX) -o $(BUILDDIR)/res/$*.2bpp $<
 
 $(BUILDDIR)/tests/%.image: tests/%.sh tests/lib/image.sh
 	@echo "Creating image $@"
