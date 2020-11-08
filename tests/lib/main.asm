@@ -57,7 +57,7 @@ serialPrintHex::
     pop  af
     ret
 
-serialCharOut:
+serialCharOut::
     ld   [rSB], a
     ld   a, $81
     ld   [rSC], a

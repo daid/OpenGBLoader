@@ -1,14 +1,19 @@
 SECTION "libfatRAM", WRAM0
-wFATStartSector: ds 4       ; LBA, LSB first
-wRootDirectoryStart: ds 4   ; LBA, LSB first
-wClustersStart: ds 4        ; LBA, LSB first
-wClusterSize: ds 1          ; In sectors
-wClusterSizeShift: ds 1          ; In number of required left shifts
-wFAT16: ds 1
-wNextDirectoryEntryCluster: ds 4  ; Note, on FAT16 this can be a sector number
-wNextDirectoryEntryIndex:   ds 1
-wNextDirectoryEntrySectorInCluster: ds 1
-wCurrentDirectoryIsFixed:   ds 1  ; Current open directory is the FAT16 fixed directory list.
+wFATStartSector:                ds 4  ; LBA, LSB first
+wRootDirectoryStart:            ds 4  ; LBA, LSB first
+wClustersStart:                 ds 4  ; LBA, LSB first
+wClusterSize:                   ds 1  ; In sectors
+wClusterSizeShift:              ds 1  ; In number of required left shifts
+wFAT16:                         ds 1
+; Directory iteration internals
+wDirectoryEntryCluster:         ds 4  ; Note, on FAT16 this can be a sector number when wCurrentDirectoryIsFixed is set
+wDirectoryEntryIndex:           ds 1
+wDirectoryEntrySectorInCluster: ds 1
+wCurrentDirectoryIsFixed:       ds 1  ; Current open directory is the FAT16 fixed directory list
+; Directory iteration output memory
+wCurrentFilename::              ds 24
+wCurrentFileType::              ds 1  ; 0 = End of list, 1 = Regular file, 2 = Directory
+wCurrentTargetCluster::         ds 4
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -212,57 +217,146 @@ ENDR
 fatOpenRootDir::
     ld   hl, wRootDirectoryStart
     call load32Bit
-    ld   hl, wNextDirectoryEntryCluster
+    ld   hl, wDirectoryEntryCluster
     call store32Bit
     xor  a
-    ld   [wNextDirectoryEntryIndex], a
-    ld   [wNextDirectoryEntrySectorInCluster], a
+    ld   [wDirectoryEntryIndex], a
+    ld   [wDirectoryEntrySectorInCluster], a
     ld   a, [wFAT16]
     ld   [wCurrentDirectoryIsFixed], a
     ret
 
 fatGetNextFile::
     ; Get the SD card sector
-    ld   hl, wNextDirectoryEntryCluster
+    ld   hl, wDirectoryEntryCluster
     call load32Bit
     ld   a, [wCurrentDirectoryIsFixed]
     and  a
     jr   nz, .readSector
     ; We got a cluster number, need to translate that to a sector number
     call clusterToSectorNumber
-    ld   a, [wNextDirectoryEntrySectorInCluster]
+    ld   a, [wDirectoryEntrySectorInCluster]
     call addA32Bit
 .readSector:
     call readSDSector
-    ; TODO: Read the directory entry
+    
+    ; Get a pointer in HL to the directory entry
+    ld   a, [wDirectoryEntryIndex]
+    swap a
+    ld   l, a
+    res  0, l
+    and  $01
+    ld   h, a
+    ld   de, SDSectorData
+    add  hl, hl
+    add  hl, de
+    
+    ; Check if we are at the end of the directory list.
+    ld   a, [hl]
+    and  a
+    ld   [wCurrentFileType], a
+    ret  z
 
-    ld   a, [wNextDirectoryEntryIndex]
+    ; TODO: Parse the directory entry properly, only reading short filename at the moment.
+    ld   de, wCurrentFilename
+    ld   c, 8
+.filenameCopyLoop:
+    ld   a, [hl+]
+    cp   $20
+    jr   z, .skipSpace
+    ld   [de], a
+    inc  de
+.skipSpace:
+    dec  c
+    jr   nz, .filenameCopyLoop
+    ld   a, "."
+    ld   [de], a
+    inc  de
+    ; copy file extension
+    ld   c, 3
+.filenameCopyLoop2:
+    ld   a, [hl+]
+    cp   $20
+    jr   z, .skipSpace2
+    ld   [de], a
+    inc  de
+.skipSpace2:
+    dec  c
+    jr   nz, .filenameCopyLoop2
+    xor  a
+    ld   [de], a
+
+    ; Get the directory entry attributes to see if we are an directory or file
+    ld   a, [hl]
+    cp   $0F
+    jr   z, .entryIsLongFilename
+    and  $10
+    jr   z, .entryIsFile
+    ld   a, $02 ; mark as directory
+    jr   .setType
+.entryIsLongFilename:
+    ld   a, $03
+    jr   .setType
+.entryIsFile:
+    ld   a, $01 ; mark as file
+.setType:
+    ld   [wCurrentFileType], a
+    
+    ; Get the cluster number for this entry
+    ld   de, $1A - $0B ; hl is at entry+$0b, and we want it at entry+$1A
+    add  hl, de
+    ld   a, [hl+]
+    ld   [wCurrentTargetCluster], a
+    ld   a, [hl+]
+    ld   [wCurrentTargetCluster + 1], a
+    ld   de, $14 - $1C ; hl is at entry+$1C, and we want it at entry+$14
+    add  hl, de
+    ld   a, [hl+]
+    ld   [wCurrentTargetCluster + 2], a
+    ld   a, [hl+]
+    ld   [wCurrentTargetCluster + 3], a
+    ld   a, [wFAT16]
+    and  a
+    jr   z, .notFAT16
+    xor  a
+    ld   [wCurrentTargetCluster + 2], a
+    ld   [wCurrentTargetCluster + 3], a
+.notFAT16:
+
+    ; Done with directory entry,
+    ; Move index to next entry in sector.
+    ld   a, [wDirectoryEntryIndex]
     inc  a
-    and  $1F
-    ld   [wNextDirectoryEntryIndex], a
+    and  $0F
+    ld   [wDirectoryEntryIndex], a
     ret  nz
 
     ; Move sector/cluster number forward
     ld   a, [wFAT16]
     and  a
     jr   z, .advanceInCluster
-    ld   hl, wNextDirectoryEntryCluster
+    ld   hl, wDirectoryEntryCluster
     call load32Bit
     ld   a, $01
     call addA32Bit
-    ld   hl, wNextDirectoryEntryCluster
+    ld   hl, wDirectoryEntryCluster
     call store32Bit
     ret
 .advanceInCluster:
-    ld   a, [wNextDirectoryEntrySectorInCluster]
+    ld   a, [wDirectoryEntrySectorInCluster]
     inc  a
-    ld   [wNextDirectoryEntrySectorInCluster], a
+    ld   [wDirectoryEntrySectorInCluster], a
     ld   hl, wClusterSize
     cp   [hl]
     ret  nz
     xor  a
-    ld   [wNextDirectoryEntrySectorInCluster], a
-    ; TODO: Get next cluster
+    ld   [wDirectoryEntrySectorInCluster], a
+    
+    ld   hl, wDirectoryEntryCluster
+    call load32Bit
+    call getNextCluster
+    ld   hl, wDirectoryEntryCluster
+    call store32Bit
     ret
 
 ; Translate a cluster number to a sector number.
@@ -284,6 +378,65 @@ clusterToSectorNumber:
 .noShift:
     ld   hl, wClustersStart
     jp   add32Bit
+
+; Get the next cluster number from the current cluster number
+; BCDE contains the current cluster on entry and the new cluster on return.
+getNextCluster:
+    ld   a, [wFAT16]
+    and  a
+    jp   z, getNextClusterFAT32
+    ; Get next cluster for FAT16
+    ; First 8 bits are the index into the SD sector, while the other 8 bits are the sector number. (cluster number is only 16 bit in FAT16)
+    xor  a
+    ld   h, a
+    ld   l, e
+    ld   e, d
+    ld   d, a
+    ld   c, a
+    ld   b, a
+    push bc
+    push hl
+    ld   hl, wFATStartSector
+    call add32Bit
+    call readSDSector
+    pop  hl
+    add  hl, hl
+    ld   de, SDSectorData
+    add  hl, de
+    ld   a, [hl+]
+    ld   e, a
+    ld   d, [hl]
+    pop  bc
+    ret
+getNextClusterFAT32:
+    ; First 7 bits = index in SD sector, so store those for later use.
+    ld   a, e
+    and  $7f
+    ; Remaining 25 bits = SD sector index
+    rl   e
+    rl   d
+    rl   c
+    rl   b ; we can safely drop the upper bit as FAT cluster numbers are only 28 bit.
+    ld   e, d
+    ld   d, c
+    ld   c, b
+    ld   b, $00
+    ld   hl, wFATStartSector
+    push af
+    call add32Bit
+    call readSDSector
+    pop  af
+    ld   h, $00
+    ld   l, a
+    add  hl, hl
+    add  hl, hl
+    ld   de, SDSectorData
+    add  hl, de
+    call load32Bit
+    ld   a, b
+    and  $0F
+    ld   b, a
+    ret
 
 ; Add the 32bit value stored at [HL] to BCDE
 add32Bit:
