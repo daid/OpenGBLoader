@@ -8,7 +8,7 @@ RGBASM   ?= $(RGBDS)rgbasm
 RGBLINK  ?= $(RGBDS)rgblink
 RGBFIX   ?= $(RGBDS)rgbfix
 
-INCDIRS  := src
+INCDIRS  := src src/include
 WARNINGS := all extra
 ASFLAGS  := $(addprefix -i,$(INCDIRS)) $(addprefix -W,$(WARNINGS))
 LDFLAGS  :=
