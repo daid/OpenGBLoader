@@ -38,4 +38,9 @@ fillImage()
     for i in $(seq 0 10); do
         echo -n "" | mcopy ${MTOOLS_PARAMS} - ::/very_long_filename${i}.gbc
     done
+    TMPFILE=$(mktemp /tmp/opengbloader.XXXXXX)
+    truncate -s "32K" "${TMPFILE}"
+    rgbfix -p 0xff -v -m 0x01 -r 1 "${TMPFILE}"
+    mcopy ${MTOOLS_PARAMS} "${TMPFILE}" ::/test.gbc
+    rm "${TMPFILE}"
 }

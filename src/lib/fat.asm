@@ -2,7 +2,7 @@ SECTION "libfatRAM", WRAM0
 wFATStartSector:                ds 4  ; LBA, LSB first
 wRootDirectoryStart:            ds 4  ; LBA, LSB first
 wClustersStart:                 ds 4  ; LBA, LSB first
-wClusterSize:                   ds 1  ; In sectors
+wFatClusterSize::               ds 1  ; In sectors
 wClusterSizeShift:              ds 1  ; In number of required left shifts
 wFAT16:                         ds 1
 ; Directory iteration internals
@@ -11,9 +11,9 @@ wDirectoryEntryIndex:           ds 1
 wDirectoryEntrySectorInCluster: ds 1
 wCurrentDirectoryIsFixed:       ds 1  ; Current open directory is the FAT16 fixed directory list
 ; Directory iteration output memory
-wCurrentFilename::              ds 24
-wCurrentFileType::              ds 1  ; 0 = End of list, 1 = Regular file, 2 = Directory
-wCurrentTargetCluster::         ds 4
+wFatCurrentFilename::           ds 24
+wFatCurrentFileType::           ds 1  ; 0 = End of list, 1 = Regular file, 2 = Directory
+wFatCurrentTargetCluster::      ds 4
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -84,7 +84,7 @@ fatInit::
 
     ; Read the number of sectors per cluster
     ld   a, [SDSectorData + $0d]
-    ld   [wClusterSize], a
+    ld   [wFatClusterSize], a
     ld   c, $00
     ld   b, $01
 .setClusterSizeLoop:
@@ -161,18 +161,13 @@ fatInit::
     ld   hl, wRootDirectoryStart
     call store32Bit
 
-    ; Get the size of the root directory. This is 16byte entries. So we need to divide by 32 to get the amount of sectors
+    ; Get the size of the root directory. This is 32byte entries. So we need to divide by 16 to get the amount of sectors
     ld   a, [SDSectorData + $11]
     ld   e, a
     ld   a, [SDSectorData + $12]
     ld   d, a
     or   e
     jr   nz, .fixedRootDirectory
-    ; /32, inefficient, but easy to code. Sorry. Could be done with a swap and some more clever bit twiddling
-REPT 5
-    srl  d
-    rr   e
-ENDR
 
     ; FAT32, root directory is located in cluster data.
     ld   hl, wRootDirectoryStart
@@ -191,6 +186,11 @@ ENDR
     jp   .rootDirDone
 
 .fixedRootDirectory:
+    ; /16, inefficient, but easy to code. Sorry. Could be done with a swap and some more clever bit twiddling
+REPT 4
+    srl  d
+    rr   e
+ENDR
     ; If we have a fixed root directory location, we are FAT16 (or FAT12)
     ; Not the recommended/best way, but works for now.
     ld   a, $01
@@ -254,11 +254,11 @@ fatGetNextFile::
     ; Check if we are at the end of the directory list.
     ld   a, [hl]
     and  a
-    ld   [wCurrentFileType], a
+    ld   [wFatCurrentFileType], a
     ret  z
 
     ; TODO: Parse the directory entry properly, only reading short filename at the moment.
-    ld   de, wCurrentFilename
+    ld   de, wFatCurrentFilename
     ld   c, 8
 .filenameCopyLoop:
     ld   a, [hl+]
@@ -300,27 +300,27 @@ fatGetNextFile::
 .entryIsFile:
     ld   a, $01 ; mark as file
 .setType:
-    ld   [wCurrentFileType], a
+    ld   [wFatCurrentFileType], a
     
     ; Get the cluster number for this entry
     ld   de, $1A - $0B ; hl is at entry+$0b, and we want it at entry+$1A
     add  hl, de
     ld   a, [hl+]
-    ld   [wCurrentTargetCluster], a
+    ld   [wFatCurrentTargetCluster], a
     ld   a, [hl+]
-    ld   [wCurrentTargetCluster + 1], a
+    ld   [wFatCurrentTargetCluster + 1], a
     ld   de, $14 - $1C ; hl is at entry+$1C, and we want it at entry+$14
     add  hl, de
     ld   a, [hl+]
-    ld   [wCurrentTargetCluster + 2], a
+    ld   [wFatCurrentTargetCluster + 2], a
     ld   a, [hl+]
-    ld   [wCurrentTargetCluster + 3], a
+    ld   [wFatCurrentTargetCluster + 3], a
     ld   a, [wFAT16]
     and  a
     jr   z, .notFAT16
     xor  a
-    ld   [wCurrentTargetCluster + 2], a
-    ld   [wCurrentTargetCluster + 3], a
+    ld   [wFatCurrentTargetCluster + 2], a
+    ld   [wFatCurrentTargetCluster + 3], a
 .notFAT16:
 
     ; Done with directory entry,
@@ -346,7 +346,7 @@ fatGetNextFile::
     ld   a, [wDirectoryEntrySectorInCluster]
     inc  a
     ld   [wDirectoryEntrySectorInCluster], a
-    ld   hl, wClusterSize
+    ld   hl, wFatClusterSize
     cp   [hl]
     ret  nz
     xor  a
@@ -358,6 +358,13 @@ fatGetNextFile::
     ld   hl, wDirectoryEntryCluster
     call store32Bit
     ret
+
+; Read the first sector of a file.
+fatReadFile::
+    ld   hl, wFatCurrentTargetCluster
+    call load32Bit
+    call clusterToSectorNumber
+    jp   readSDSector
 
 ; Translate a cluster number to a sector number.
 ; BCDE contains the current sector number.
@@ -516,4 +523,6 @@ serialPrint32Bit:
     call serialPrintHex
     ld   a, e
     call serialPrintHex
+    ld   a, "\n"
+    call serialCharOut
     ret
