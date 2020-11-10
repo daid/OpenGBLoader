@@ -2,7 +2,7 @@
 SECTION "test", ROM0
 
 test::
-    call hardwareInit
+    call cartHardwareInit
     call fatInit
     jp   nz, testFailed
     ret

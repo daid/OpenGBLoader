@@ -2,7 +2,7 @@
 SECTION "test", ROM0
 
 test::
-    call hardwareInit
+    call cartHardwareInit
 
     ld BC, $0000
     ld DE, $0000

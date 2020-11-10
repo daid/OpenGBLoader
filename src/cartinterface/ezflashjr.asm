@@ -26,7 +26,7 @@ REG_SD_COMMAND      equ $7FB4
 
 SECTION "ezflash", ROMX
 ; Call at the start of the rom to setup the hardware properly.
-hardwareInit::
+cartHardwareInit::
     ld   a, $E1
     ld   [REG_UNLOCK1], a
     ld   a, $E2
