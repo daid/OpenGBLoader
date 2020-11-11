@@ -5,6 +5,7 @@ test::
     call cartHardwareInit
     call fatInit
     jp   nz, testFailed
+    call fatGetNextFile
 .loop:
     ld   a, [wFatCurrentFileType]
     cp   $03
@@ -26,6 +27,7 @@ readFileTest:
     cp   $ce
     jp   nz, testFailed
     ld   a, [SDSectorData + $147]
-    cp   $01
+    cp   $10
     jp   nz, testFailed
+
     ret

@@ -40,7 +40,7 @@ fillImage()
     done
     TMPFILE=$(mktemp /tmp/opengbloader.XXXXXX)
     truncate -s "32K" "${TMPFILE}"
-    rgbfix -p 0xff -v -m 0x01 -r 1 "${TMPFILE}"
+    rgbfix -p 0xff -v -m 0x10 -r 0x02 "${TMPFILE}"
     mcopy ${MTOOLS_PARAMS} "${TMPFILE}" ::/test.gbc
     rm "${TMPFILE}"
 }

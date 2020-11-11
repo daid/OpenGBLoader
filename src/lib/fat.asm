@@ -14,6 +14,7 @@ wCurrentDirectoryIsFixed:       ds 1  ; Current open directory is the FAT16 fixe
 wFatCurrentFilename::           ds 24
 wFatCurrentFileType::           ds 1  ; 0 = End of list, 1 = Regular file, 2 = Directory
 wFatCurrentTargetCluster::      ds 4
+wFatCurrentFileSize::           ds 4
 wMemEnd:
 
 SECTION "libfat", ROM0
@@ -207,7 +208,6 @@ ENDR
 
 .rootDirDone:
     call fatOpenRootDir
-    call fatGetNextFile
 
     ; Done
     xor  a
@@ -309,7 +309,16 @@ fatGetNextFile::
     ld   [wFatCurrentTargetCluster], a
     ld   a, [hl+]
     ld   [wFatCurrentTargetCluster + 1], a
-    ld   de, $14 - $1C ; hl is at entry+$1C, and we want it at entry+$14
+    ; As we are at the file size now, copy that before we continue with high cluster bytes
+    ld   a, [hl+]
+    ld   [wFatCurrentFileSize], a
+    ld   a, [hl+]
+    ld   [wFatCurrentFileSize+1], a
+    ld   a, [hl+]
+    ld   [wFatCurrentFileSize+2], a
+    ld   a, [hl+]
+    ld   [wFatCurrentFileSize+3], a
+    ld   de, $14 - $1C ; hl is at entry+$20, and we want it at entry+$14
     add  hl, de
     ld   a, [hl+]
     ld   [wFatCurrentTargetCluster + 2], a
@@ -318,7 +327,7 @@ fatGetNextFile::
     ld   a, [wFAT16]
     and  a
     jr   z, .notFAT16
-    xor  a
+    xor  a ;On fat16, clear the top 16 bit of the cluster number, as they are always zero, and the directory entry might contain other data.
     ld   [wFatCurrentTargetCluster + 2], a
     ld   [wFatCurrentTargetCluster + 3], a
 .notFAT16:
@@ -367,7 +376,9 @@ fatReadFile::
     jp   readSDSector
 
 ; Translate a cluster number to a sector number.
-; BCDE contains the current sector number.
+; In: BCDE contains the cluster number
+; Out: BCDE contains the current sector number.
+fatClusterToSectorNumber::
 clusterToSectorNumber:
     ; Cluster numbers start at 2, so subtract the 2.
     ld   a, $02
@@ -388,6 +399,7 @@ clusterToSectorNumber:
 
 ; Get the next cluster number from the current cluster number
 ; BCDE contains the current cluster on entry and the new cluster on return.
+fatGetNextCluster::
 getNextCluster:
     ld   a, [wFAT16]
     and  a
@@ -443,70 +455,6 @@ getNextClusterFAT32:
     ld   a, b
     and  $0F
     ld   b, a
-    ret
-
-; Add the 32bit value stored at [HL] to BCDE
-add32Bit:
-    ld   a, [hl+]
-    add  e
-    ld   e, a
-    ld   a, [hl+]
-    adc  d
-    ld   d, a
-    ld   a, [hl+]
-    adc  c
-    ld   c, a
-    ld   a, [hl+]
-    adc  b
-    ld   b, a
-    ret
-
-; Add A to the 32bit number in BCDE
-addA32Bit:
-    add  e
-    ld   e, a
-    ret  nc
-    inc  d
-    ret  nz
-    inc  c
-    ret  nz
-    inc  b
-    ret
-
-; Substract A from the 32bit number in BCDE
-subA32Bit:
-    ld   h, a
-    ld   a, e
-    sub  h
-    ld   e, a
-    ret  nc
-    dec  d
-    ret  nz
-    dec  c
-    ret  nz
-    dec  b
-    ret
-
-; Read a 32bit value from [hl] to BCDE
-load32Bit:
-    ld   e, [hl]
-    inc  hl
-    ld   d, [hl]
-    inc  hl
-    ld   c, [hl]
-    inc  hl
-    ld   b, [hl]
-    ret
-
-; Store the 32bit value in BCDE into [hl]
-store32Bit:
-    ld   [hl], e
-    inc  hl
-    ld   [hl], d
-    inc  hl
-    ld   [hl], c
-    inc  hl
-    ld   [hl], b
     ret
 
 errorRet:

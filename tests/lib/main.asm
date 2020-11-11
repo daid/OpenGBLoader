@@ -57,7 +57,7 @@ serialPrintHex::
     pop  af
     ret
 
-serialPrint32Bit:
+serialPrint32Bit::
     ld   a, b
     call serialPrintHex
     ld   a, c

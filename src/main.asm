@@ -68,6 +68,48 @@ displayString::
     inc  de
     jr   displayString
 
+displayChar::
+    ld   c, a
+.waitVRAM:
+    ld   a, [rSTAT]
+    and  $02
+    jr   nz, .waitVRAM
+    ld   a, c
+    ld   [de], a
+    inc  de
+    ret
+
+; Display a text on screen
+; a index in string table
+; hl pointer to string table
+; de screen position
+displayStringFromTable::
+    ld   b, $00
+    ld   c, a
+    add  hl, bc
+    add  hl, bc
+    ld   a, [hl+]
+    ld   h, [hl]
+    ld   l, a
+    jp   displayString
+
+clearScreen::
+    call waitVBlank
+    ldh  [rLCDC], a ; a is zero after waitVBlank
+    ld   hl, _SCRN0
+    ld   bc, SCRN_VX_B * SCRN_Y_B
+.loop:
+    xor  a
+    ld   [hl+], a
+    dec  bc
+    ld   a, c
+    or   b
+    jr   nz, .loop
+
+    ld   a, LCDCF_ON | LCDCF_BGON
+    ldh  [rLCDC], a
+    ret
+
 
 ; Call this routine once per frame to update the joypad related variables.
 ; Routine also returns the currently pressed buttons in the a register.

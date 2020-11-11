@@ -5,6 +5,7 @@ test::
     call cartHardwareInit
     call fatInit
     jp   nz, testFailed
+    call fatGetNextFile
     xor  a
     push af
 .loop:
