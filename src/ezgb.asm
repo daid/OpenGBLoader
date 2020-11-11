@@ -185,12 +185,12 @@ getFileInfo:
     daa
     dec  c
     jr   nz, .bcdLoop
-    ld   c, a
+    ld   b, a
     swap a
     and  $0F
     add  "0"
     call displayChar
-    ld   a, c
+    ld   a, b
     and  $0F
     add  "0"
     call displayChar
@@ -313,7 +313,7 @@ romSRAMStringNone: db "No", 0
 romSRAMStringRAM: db "RAM", 0
 romSRAMStringBATTERY: db "RAM+Battery", 0
 
-
+; TODO: This belongs with the ezflash specific code.
 startCurrentFile:
     ld   a, [wRomRomSize]
     and  a
