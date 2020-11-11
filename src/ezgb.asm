@@ -178,6 +178,8 @@ getFileInfo:
     ld   de, _SCRN0 + SCRN_VX_B * 3 + 1
     call displayString
     ld   a, [wRomRomSize]
+    and  a
+    jr   z, .skipBcdLoop
     ld   c, a
     xor  a
 .bcdLoop:
@@ -185,6 +187,7 @@ getFileInfo:
     daa
     dec  c
     jr   nz, .bcdLoop
+.skipBcdLoop:
     ld   b, a
     swap a
     and  $0F
